@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Field Notes — PWA (v2.1)</title>
+  <meta name="theme-color" content="#111111">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23111%22/><text x=%2250%25%22 y=%2255%25%22 text-anchor=%22middle%22 font-size=%2270%22 fill=%22%23fff%22 font-family=%22Arial,Helvetica,sans-serif%22>F</text></svg>">
+  <style>
+    :root{--bg:#f7f7fb;--fg:#111;--muted:#6b7280;--card:#fff;--border:#e5e7eb;}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+    .wrap{max-width:980px;margin:0 auto;padding:16px;}
+    .bar{position:sticky;top:0;backdrop-filter:saturate(1.2) blur(10px);background:#ffffffcc;border-bottom:1px solid var(--border);z-index:10;}
+    .bar .inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;max-width:980px;margin:0 auto;}
+    h1{font-size:18px;margin:0;}
+    button{border:1px solid var(--border);background:#fff;border-radius:12px;padding:8px 12px;font-size:14px;cursor:pointer}
+    button.primary{background:#111;color:#fff;border-color:#111;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,.04);}
+    .grid{display:grid;gap:12px;}
+    @media(min-width:900px){.grid-2{grid-template-columns:1fr 1fr;}}
+    label span{display:block;font-size:12px;color:var(--muted);}
+    input[type="text"], textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:10px;font-size:14px;box-sizing:border-box;}
+    textarea{min-height:96px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th,td{padding:8px;border-bottom:1px solid var(--border);vertical-align:top;}
+    thead th{background:#f1f5f9;text-align:left;}
+    .muted{color:var(--muted);}
+    .row-actions{display:flex;flex-wrap:wrap;gap:6px;}
+    .thumb{width:80px;height:80px;object-fit:cover;border:1px solid var(--border);border-radius:10px;cursor:pointer}
+    .thumbs{display:flex;gap:8px;overflow:auto;padding-bottom:4px;flex-wrap:wrap}
+    .chip{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;background:#fff}
+    .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .filters input{max-width:240px}
+    footer{color:var(--muted);font-size:12px;text-align:center;padding:24px 0;}
+    .nowrap{white-space:nowrap}
+    .preview-item{position:relative;display:inline-block}
+    .del{position:absolute;top:-8px;right:-8px;background:#111;color:#fff;border-radius:999px;border:1px solid #000;padding:2px 6px;font-size:12px;line-height:1;cursor:pointer}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:50}
+    .modal.open{display:flex}
+    .modal .toolbar{position:fixed;bottom:16px;left:0;right:0;display:flex;gap:8px;justify-content:center;align-items:center}
+    .modal .toolbar button{background:#ffffff22;color:#fff;border-color:#ffffff44}
+    video{width:100%;max-height:240px;background:#000;border-radius:12px}
+    #fsVideo{width:100vw;height:100vh;object-fit:cover;background:#000}
+    .badge{font-size:11px;color:#0a0;border:1px solid #0a0;border-radius:999px;padding:2px 8px;background:#eaffea}
+    .hint{font-size:12px;color:#6b7280}
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="inner">
+      <h1>Field Notes — PWA (<span id="ver">v2.1</span>)</h1>
+      <div class="title-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <label><span>Project name</span><input id="projectName" type="text" placeholder="e.g., Rwanda_FieldStudy"/></label>
+        <label style="display:flex;align-items:center;gap:8px;"><input id="autoDownload" type="checkbox"> <span>Auto-download images</span></label>
+        <button id="btnInstall" style="display:none">Install app</button>
+      </div>
+      <div class="row-actions">
+        <button id="btnCsv">Export CSV</button>
+        <button id="btnJson">Export JSON</button>
+        <button id="btnClear">Delete All</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <section class="card">
+      <h2 style="margin:0 0 8px;font-size:16px;">New entry</h2>
+      <div class="grid grid-2">
+        <div class="grid">
+          <label>
+            <span>Sample ID <span class="muted">(auto date+sequence)</span></span>
+            <input id="sampleId" type="text" placeholder="e.g., 20250911-001">
+          </label>
+          <label>
+            <span>Tags (comma separated)</span>
+            <input id="tags" type="text" placeholder="e.g., fruit, CC, low humidity">
+          </label>
+          <label>
+            <span>Notes</span>
+            <textarea id="notes" placeholder="Observations, conditions, etc."></textarea>
+          </label>
+          <div class="muted hint">GPS is recorded per Sample ID. On failure, CSV writes <code>GPS_FAILED</code>.</div>
+        </div>
+        <div class="grid">
+          <div class="row-actions" style="flex-wrap:wrap">
+            <button id="btnAddPhoto">Choose file</button>
+            <button id="btnCameraFS">Open camera (full screen)</button>
+          </div>
+          <input id="imgInput" type="file" accept="image/*" style="display:none">
+          <div id="previewWrap" class="thumbs" style="display:none"></div>
+
+          <div class="muted hint">Images auto-compressed (max 1600px, q=0.85).</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button id="btnSave" class="primary">Save entry</button>
+            <button id="btnReset">Reset</button>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+            <button id="btnSetBackup">Set backup root folder</button>
+            <span id="backupStatus" class="muted">No folder</span>
+            <label style="display:flex;align-items:center;gap:6px;"><input id="autoBackup" type="checkbox"> Auto-backup on save (project/date folder)</label>
+            <span class="hint">Chrome/Edge (Android/PC). iOS Safari not supported.</span>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+            <button id="btnShareProject">Share Project (CSV+images)</button>
+            <button id="btnZipProject">Export Project ZIP</button>
+            <span class="hint">Use when online to send to Google Drive.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <div class="filters">
+        <strong>Filter:</strong>
+        <input id="q" type="text" placeholder="Keyword (ID/tags/notes)">
+        <button id="btnClearFilter">Clear</button>
+        <span class="muted">Count: <span id="count">0</span> / <span id="total">0</span></span>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px;">
+      <div class="table-wrap" style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:180px">Images</th>
+              <th>Sample ID</th>
+              <th>Created</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+              <th>Tags</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>Install to home screen for best offline experience.</footer>
+  </div>
+
+  <!-- Fullscreen Camera Modal -->
+  <div id="camModal" class="modal" aria-hidden="true">
+    <video id="fsVideo" autoplay playsinline muted></video>
+    <div class="toolbar">
+      <button id="btnFSShutter" class="primary">Capture</button>
+      <button id="btnFSClose">Close ✕</button>
+    </div>
+  </div>
+
+  <!-- Gallery Modal -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="modal-inner">
+      <div class="toolbar">
+        <button id="prevBtn">← Prev</button>
+        <div id="caption"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="downloadBtn">Download image</button>
+          <button id="closeBtn">Close ✕</button>
+        </div>
+      </div>
+      <img id="modalImg" src="" alt="">
+      <div class="toolbar" style="justify-content:center;gap:10px">
+        <button id="firstBtn">≪ First</button>
+        <button id="nextBtn">Next →</button>
+        <button id="lastBtn">Last ≫</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const storeKey = 'field_entries_pwa_v2_1';
+    let entries = [];
+    let previewImages = []; // {name,dataURL,type,takenAt,fileNameHint}
+    let currentGallery = { images: [], index: 0 };
+    let mediaStream = null;
+    let deferredPrompt = null; // PWA install
+    let backupDirHandle = null;
+
+    // PWA register
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', ()=>{
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+    window.addEventListener('beforeinstallprompt', (e)=>{
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('btnInstall').style.display = 'inline-block';
+    });
+    document.getElementById('btnInstall').onclick = async ()=>{
+      if(!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('btnInstall').style.display = 'none';
+    };
+
+    function $(id){ return document.getElementById(id); }
+    function load(){ try{ entries = JSON.parse(localStorage.getItem(storeKey)) || []; }catch(e){ entries=[]; } render(); suggestSampleId(); }
+    function save(){ try{ localStorage.setItem(storeKey, JSON.stringify(entries)); }catch(e){} }
+    function uid(){ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2); }
+    function ymd(d=new Date()){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return `${y}${m}${da}`; }
+    function ymd_dash(d=new Date()){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
+    function suggestSampleId(){ const prefix=ymd(); const n=entries.filter(e=>(e.sampleId||'').startsWith(prefix)).length+1; const el=$('sampleId'); if(!el.value){ el.value=`${prefix}-${String(n).padStart(3,'0')}`; } }
+    function parseTags(s){ return s? s.split(',').map(t=>t.trim()).filter(Boolean): []; }
+    function sanitizeFilename(s){ return (s||'project').trim().toLowerCase().replace(/[^a-z0-9-_]+/g,'-').replace(/^-+|-+$/g,'') || 'project'; }
+    function sanitizeId(s){ return (s||'id').trim().toLowerCase().replace(/[^a-z0-9-_]+/g,'-').replace(/^-+|-+$/g,'') || 'id'; }
+
+    function toCSV(rows){
+      if(!rows.length) return '';
+      const header = ['id','timestamp','sample_id','tags','notes','image_count','image_names','images_taken_at','latitude','longitude'];
+      const esc = (v)=>{ const s=String(v ?? ''); return /[",\n]/.test(s) ? '"'+s.replaceAll('"','""')+'"' : s; };
+      const lines = [header.join(',')];
+      for(const r of rows){
+        lines.push([
+          r.id, r.timestamp, r.sampleId ?? '', (r.tags||[]).join('|'), r.notes ?? '',
+          (r.images? r.images.length : 0),
+          (r.images? r.images.map(x=>x.fileNameHint || x.name || 'photo.jpg').join('|') : ''),
+          (r.images? r.images.map(x=>x.takenAt || '').join('|') : ''),
+          r.latitude ?? '', r.longitude ?? ''
+        ].map(esc).join(','));
+      }
+      return lines.join('\n');
+    }
+    async function downloadBlob(content, filename, type='application/octet-stream'){
+      const blob = content instanceof Blob ? content : new Blob([content], {type});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+    function fileToArrayBuffer(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsArrayBuffer(file); }); }
+    function fileToDataURL(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+
+    // EXIF DateTimeOriginal (JPEG minimal)
+    async function getExifDateFromFile(file){
+      try{
+        const buf = await fileToArrayBuffer(file);
+        const view = new DataView(buf);
+        let offset = 0;
+        if(view.getUint16(0,false) !== 0xFFD8) return null;
+        offset += 2;
+        while(offset < view.byteLength){
+          const marker = view.getUint16(offset, false); offset += 2;
+          const size = view.getUint16(offset, false); offset += 2;
+          if(marker === 0xFFE1){
+            if(view.getUint32(offset, false) === 0x45786966 && view.getUint16(offset+4,false) === 0x0000){
+              const tiff = offset + 6;
+              const little = view.getUint16(tiff, false) === 0x4949;
+              const get16 = (o)=> view.getUint16(o, little);
+              const get32 = (o)=> view.getUint32(o, little);
+              const firstIFD = tiff + get32(tiff + 4);
+              function readIFD(base){
+                const num = get16(base);
+                const entries = [];
+                for(let i=0;i<num;i++){
+                  const e = base + 2 + i*12;
+                  const tag = get16(e);
+                  const type = get16(e+2);
+                  const count = get32(e+4);
+                  const valOff = get32(e+8);
+                  entries.push({tag,type,count,valOff});
+                }
+                return entries;
+              }
+              const ifd0 = readIFD(firstIFD);
+              const exifPtr = ifd0.find(e=>e.tag===0x8769);
+              if(exifPtr){
+                const exifIFD = tiff + exifPtr.valOff;
+                const exifEntries = readIFD(exifIFD);
+                const dtOrig = exifEntries.find(e=>e.tag===0x9003);
+                const dt = dtOrig || exifEntries.find(e=>e.tag===0x0132);
+                if(dt){
+                  const count = dt.count;
+                  const start = tiff + dt.valOff;
+                  let s='';
+                  for(let i=0;i<count && (start+i)<view.byteLength;i++){
+                    const ch = view.getUint8(start+i);
+                    if(ch===0) break;
+                    s += String.fromCharCode(ch);
+                  }
+                  if(/^\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}$/.test(s)){
+                    const iso = s.replace(/:/g,'-').replace(' ','T') + 'Z';
+                    return iso;
+                  }
+                  return s || null;
+                }
+              }
+            }
+          }
+          offset += size - 2;
+        }
+      }catch(e){}
+      return null;
+    }
+
+    async function compressImageDataURL(dataURL, maxSize=1600, quality=0.85){
+      const img = new Image(); img.src = dataURL;
+      await new Promise((res,rej)=>{ img.onload=()=>res(); img.onerror=rej; });
+      const scale = Math.min(1, maxSize/Math.max(img.width,img.height));
+      const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+      return new Promise((resolve)=>{
+        canvas.toBlob((blob)=>{ const r = new FileReader(); r.onload = ()=> resolve(r.result); r.readAsDataURL(blob); }, 'image/jpeg', quality);
+      });
+    }
+    async function compressImageFile(file, maxSize=1600, quality=0.85){
+      const dataURL = await fileToDataURL(file);
+      const out = await compressImageDataURL(dataURL, maxSize, quality);
+      const exifDate = await getExifDateFromFile(file);
+      return { dataURL: out, name: file.name || 'photo.jpg', type: 'image/jpeg', takenAt: exifDate || null };
+    }
+
+    function addPreviewImage(obj){
+      previewImages.push(obj);
+      const wrap = $('previewWrap');
+      wrap.style.display='flex';
+      const holder = document.createElement('div'); holder.className='preview-item';
+      const img = document.createElement('img'); img.src = obj.dataURL; img.className='thumb';
+      const del = document.createElement('button'); del.textContent='×'; del.className='del'; del.title='Remove this image';
+      del.onclick = ()=>{
+        const idx = previewImages.indexOf(obj);
+        if(idx>=0) previewImages.splice(idx,1);
+        holder.remove();
+        if(previewImages.length===0){ wrap.style.display='none'; }
+      };
+      holder.appendChild(img); holder.appendChild(del);
+      wrap.appendChild(holder);
+    }
+
+    $('btnAddPhoto').onclick = ()=> $('imgInput').click();
+    $('imgInput').onchange = async (e)=>{
+      const file = e.target.files?.[0] || null;
+      if(!file) return;
+      const comp = await compressImageFile(file, 1600, 0.85);
+      addPreviewImage(comp);
+      e.target.value='';
+    };
+
+    // Fullscreen camera
+    async function startCameraFS(){
+      const modal = $('camModal'); modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+      if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+      const isLocalhost = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if(!(window.isSecureContext || isLocalhost)){
+        alert('Open over HTTPS or localhost (required for camera).');
+        closeCameraFS();
+        return;
+      }
+      const videoEl = $('fsVideo');
+      videoEl.setAttribute('playsinline',''); videoEl.setAttribute('autoplay',''); videoEl.setAttribute('muted',''); videoEl.muted = true;
+      const constraintsList = [
+        { video: { facingMode: { exact: 'environment' } }, audio: false },
+        { video: { facingMode: 'environment' }, audio: false },
+        { video: true, audio: false },
+      ];
+      let lastError = null;
+      for(const c of constraintsList){
+        try{
+          mediaStream = await navigator.mediaDevices.getUserMedia(c);
+          videoEl.srcObject = mediaStream;
+          return;
+        }catch(err){ lastError = err; }
+      }
+      let msg = 'Failed to init camera.';
+      if(lastError && lastError.name){
+        if(lastError.name === 'NotAllowedError') msg += ' Please allow camera permissions.';
+        else if(lastError.name === 'NotFoundError') msg += ' No camera device found.';
+        else if(lastError.name === 'NotReadableError') msg += ' Camera in use by another app.';
+        else if(lastError.name === 'OverconstrainedError') msg += ' Constraints not satisfied.';
+      }
+      alert(msg); closeCameraFS();
+    }
+    function closeCameraFS(){
+      const modal = $('camModal'); modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
+      if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+    }
+    $('btnCameraFS').onclick = startCameraFS;
+    $('btnFSClose').onclick = closeCameraFS;
+    $('btnFSShutter').onclick = async ()=>{
+      const video = $('fsVideo');
+      if(!video.videoWidth){ alert('Camera is not ready.'); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(video, 0, 0);
+      const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+      const compressed = await compressImageDataURL(dataURL, 1600, 0.85);
+      addPreviewImage({ dataURL: compressed, name: `photo_${Date.now()}.jpg`, type: 'image/jpeg', takenAt: new Date().toISOString() });
+    };
+
+    // File naming
+    function buildImageFileName(baseDateISO, projectName, sampleId, index){
+      const d = baseDateISO ? new Date(baseDateISO) : new Date();
+      const yyyy = d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+      const date = `${yyyy}${mm}${dd}`;
+      const proj = sanitizeFilename(projectName);
+      const sid = sanitizeId(sampleId);
+      const idx = String(index+1).padStart(2,'0');
+      return `${date}_${proj}_${sid}_img${idx}.jpg`;
+    }
+
+    async function triggerDownloadsForEntry(entry){
+      for(let i=0;i<(entry.images||[]).length;i++){
+        const img = entry.images[i];
+        const fname = img.fileNameHint || buildImageFileName(entry.timestamp, $('projectName').value || 'project', entry.sampleId || 'id', i);
+        const res = await fetch(img.dataURL);
+        const blob = await res.blob();
+        await downloadBlob(blob, fname, 'image/jpeg');
+      }
+    }
+
+    // ---- Folder operations (FS Access API) ----
+    async function ensureProjectDateDir(rootHandle, project, dateStr){
+      const pHandle = await rootHandle.getDirectoryHandle(project, { create: true });
+      const dHandle = await pHandle.getDirectoryHandle(dateStr, { create: true });
+      return dHandle;
+    }
+    async function saveImagesToChosenFolder(entry, dirHandle){
+      try{
+        for(let i=0;i<(entry.images||[]).length;i++){
+          const img = entry.images[i];
+          const fname = img.fileNameHint || buildImageFileName(entry.timestamp, $('projectName').value || 'project', entry.sampleId || 'id', i);
+          const res = await fetch(img.dataURL);
+          const blob = await res.blob();
+          const fileHandle = await dirHandle.getFileHandle(fname, { create: true });
+          const stream = await fileHandle.createWritable();
+          await stream.write(blob);
+          await stream.close();
+        }
+      }catch(e){
+        console.error(e);
+        alert('Saving to folder failed.');
+      }
+    }
+    async function writeCsvToFolder(rows, dirHandle, filename){
+      const csv = toCSV(rows);
+      const fh = await dirHandle.getFileHandle(filename, { create: true });
+      const ws = await fh.createWritable();
+      await ws.write(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+      await ws.close();
+    }
+
+    $('btnSetBackup').onclick = async ()=>{
+      if(!('showDirectoryPicker' in window)){
+        alert('Your browser does not support choosing a folder. Use Chrome/Edge (Android/PC).');
+        return;
+      }
+      try{
+        const handle = await window.showDirectoryPicker();
+        const perm = await handle.requestPermission({ mode: 'readwrite' });
+        if(perm !== 'granted'){ alert('Permission denied.'); return; }
+        backupDirHandle = handle;
+        $('backupStatus').innerHTML = 'Root set <span class="badge">✓</span>';
+        alert('Backup root set. Project/date subfolders will be created automatically.');
+      }catch(e){
+        console.error(e);
+        alert('Folder selection was cancelled or failed.');
+      }
+    };
+
+    // GPS
+    async function getGPS(){
+      if(!('geolocation' in navigator)){
+        return { lat: 'GPS_FAILED', lon: 'GPS_FAILED' };
+      }
+      return new Promise((resolve)=>{
+        const opts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+        let done = false;
+        const finish = (val)=>{ if(!done){ done=true; resolve(val); } };
+        navigator.geolocation.getCurrentPosition(
+          (pos)=>{
+            const { latitude, longitude } = pos.coords || {};
+            if(typeof latitude === 'number' && typeof longitude === 'number'){
+              finish({ lat: latitude, lon: longitude });
+            }else{
+              finish({ lat: 'GPS_FAILED', lon: 'GPS_FAILED' });
+            }
+          },
+          (err)=>{
+            console.warn('GPS error', err);
+            finish({ lat: 'GPS_FAILED', lon: 'GPS_FAILED' });
+          },
+          opts
+        );
+        setTimeout(()=>finish({ lat: 'GPS_FAILED', lon: 'GPS_FAILED' }), 25000);
+      });
+    }
+
+    $('btnSave').onclick = async ()=>{
+      const gps = await getGPS();
+
+      const entry = {
+        id: uid(),
+        timestamp: new Date().toISOString(),
+        sampleId: $('sampleId').value.trim() || null,
+        tags: parseTags($('tags').value),
+        notes: $('notes').value.trim() || null,
+        images: previewImages.slice(),
+        latitude: gps.lat,
+        longitude: gps.lon,
+      };
+      const proj = $('projectName').value || 'project';
+      entry.images.forEach((img, i)=>{
+        img.fileNameHint = buildImageFileName(entry.timestamp, proj, entry.sampleId || 'id', i);
+      });
+      entries.unshift(entry); save(); render();
+
+      // optional downloads
+      if($('autoDownload').checked){ await triggerDownloadsForEntry(entry); }
+
+      // Auto-backup to project/date folder
+      if($('autoBackup').checked && backupDirHandle){
+        try{
+          const todayDate = ymd_dash(new Date());
+          const projSan = sanitizeFilename(proj);
+          const subdir = await ensureProjectDateDir(backupDirHandle, projSan, todayDate);
+          await saveImagesToChosenFolder(entry, subdir);
+
+          // Also write today's CSV for this project (regenerated each save)
+          const todaysRows = entries.filter(e => {
+            const dt = ymd_dash(new Date(e.timestamp));
+            return dt === todayDate;
+          });
+          const csvName = `${todayDate}_${projSan}.csv`;
+          await writeCsvToFolder(todaysRows, subdir, csvName);
+        }catch(err){
+          console.error(err);
+          alert('Auto-backup failed.');
+        }
+      }
+
+      // reset UI
+      $('tags').value=''; $('notes').value=''; $('previewWrap').innerHTML=''; $('previewWrap').style.display='none'; previewImages=[];
+      $('sampleId').value=''; suggestSampleId(); closeCameraFS();
+    };
+
+    $('btnReset').onclick = ()=>{
+      $('tags').value=''; $('notes').value='';
+      $('previewWrap').innerHTML=''; $('previewWrap').style.display='none';
+      previewImages=[];
+      $('sampleId').value=''; suggestSampleId();
+      closeCameraFS();
+    };
+
+    function render(){
+      const q = ($('q')?.value || '').toLowerCase();
+      const filtered = entries.filter(e=>{
+        if(!q) return true;
+        const hay = [e.sampleId||'', (e.tags||[]).join(' '), e.notes||''].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+      $('total').textContent = String(entries.length);
+      $('count').textContent = String(filtered.length);
+
+      const tb = $('tbody'); tb.innerHTML='';
+      for(const e of filtered){
+        const tr = document.createElement('tr');
+
+        const tdImgs = document.createElement('td');
+        const thumbs = document.createElement('div'); thumbs.className='thumbs';
+        if(e.images && e.images.length){
+          e.images.forEach((im, idx)=>{
+            const img = document.createElement('img'); img.src = im.dataURL; img.alt = (im.fileNameHint||im.name||'photo'); img.className='thumb';
+            img.onclick = ()=> openGallery(e.images, idx, e.sampleId);
+            thumbs.appendChild(img);
+          });
+        }else{ thumbs.innerHTML = '<span class="muted">—</span>'; }
+        tdImgs.appendChild(thumbs);
+
+        const tdId = document.createElement('td'); tdId.textContent = e.sampleId || '(none)';
+        const tdTs = document.createElement('td'); tdTs.textContent = new Date(e.timestamp).toLocaleString();
+        const tdLat = document.createElement('td'); tdLat.textContent = e.latitude ?? '';
+        const tdLon = document.createElement('td'); tdLon.textContent = e.longitude ?? '';
+        const tdTags = document.createElement('td'); const chips=document.createElement('div');
+        (e.tags||[]).forEach(t=>{ const c=document.createElement('span'); c.className='chip'; c.textContent=t; c.onclick=()=>{ $('q').value=t; render(); }; chips.appendChild(c); });
+        tdTags.appendChild(chips);
+        const tdNotes = document.createElement('td'); tdNotes.textContent = e.notes || '(none)';
+        const tdOps = document.createElement('td');
+        const ops = document.createElement('div'); ops.className='row-actions';
+        const btnCopy = document.createElement('button'); btnCopy.textContent='Copy'; btnCopy.style.fontSize='12px';
+        btnCopy.onclick=()=>{
+          const text = [
+            `ID: ${e.sampleId ?? '(none)'}`,
+            `Created: ${new Date(e.timestamp).toLocaleString()}`,
+            (e.tags?.length? `Tags: ${e.tags.join(', ')}` : ''),
+            e.notes ? `Notes: ${e.notes}` : '',
+            (e.images?.length? `Images: ${e.images.length}` : ''),
+            `Lat: ${e.latitude ?? ''}`,
+            `Lon: ${e.longitude ?? ''}`,
+          ].filter(Boolean).join('\n');
+          navigator.clipboard?.writeText(text);
+          alert('Copied.');
+        };
+        const btnDl = document.createElement('button'); btnDl.textContent='Download images'; btnDl.style.fontSize='12px';
+        btnDl.onclick = async ()=>{ await triggerDownloadsForEntry(e); };
+        const btnSaveFolderRow = document.createElement('button'); btnSaveFolderRow.textContent='Save to folder'; btnSaveFolderRow.style.fontSize='12px';
+        btnSaveFolderRow.onclick = async ()=>{
+          if(!backupDirHandle){
+            alert('No backup root set. Click "Set backup folder" first.'); return;
+          }
+          const projSan = sanitizeFilename($('projectName').value || 'project');
+          const todayDate = ymd_dash(new Date(e.timestamp));
+          const subdir = await ensureProjectDateDir(backupDirHandle, projSan, todayDate);
+          await saveImagesToChosenFolder(e, subdir);
+        };
+        const btnDel = document.createElement('button'); btnDel.textContent='Delete'; btnDel.style.fontSize='12px';
+        btnDel.onclick=()=>{ if(!confirm('Delete this entry?')) return; entries = entries.filter(x=>x.id!==e.id); save(); render(); };
+        ops.appendChild(btnCopy); ops.appendChild(btnDl); ops.appendChild(btnSaveFolderRow); ops.appendChild(btnDel);
+        tdOps.appendChild(ops);
+
+        tr.append(tdImgs, tdId, tdTs, tdLat, tdLon, tdTags, tdNotes, tdOps);
+        tb.appendChild(tr);
+      }
+    }
+
+    function openGallery(images, index=0, label=''){
+      currentGallery = { images, index };
+      const modal = $('modal'); modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+      updateGallery(label);
+    }
+    function closeGallery(){
+      const modal = $('modal'); modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
+    }
+    function updateGallery(label=''){
+      const img = currentGallery.images[currentGallery.index];
+      const elImg = $('modalImg'); elImg.src = img.dataURL; elImg.alt = img.fileNameHint || img.name || '';
+      const extra = img.takenAt ? ` — Taken: ${new Date(img.takenAt).toLocaleString()}` : '';
+      $('caption').textContent = `${label? label+' / ' : ''}${currentGallery.index+1} / ${currentGallery.images.length}${extra}`;
+    }
+
+    $('q')?.addEventListener('input', render);
+    $('btnClearFilter').onclick = ()=>{ $('q').value=''; render(); };
+
+    $('closeBtn').onclick = closeGallery;
+    $('prevBtn').onclick = ()=>{ if(!currentGallery.images.length) return; currentGallery.index = Math.max(0, currentGallery.index-1); updateGallery(); };
+    $('nextBtn').onclick = ()=>{ if(!currentGallery.images.length) return; currentGallery.index = Math.min(currentGallery.images.length-1, currentGallery.index+1); updateGallery(); };
+    $('firstBtn').onclick = ()=>{ if(!currentGallery.images.length) return; currentGallery.index = 0; updateGallery(); };
+    $('lastBtn').onclick = ()=>{ if(!currentGallery.images.length) return; currentGallery.index = currentGallery.images.length-1; updateGallery(); };
+    $('downloadBtn').onclick = async ()=>{
+      if(!currentGallery.images.length) return;
+      const img = currentGallery.images[currentGallery.index];
+      const res = await fetch(img.dataURL); const blob = await res.blob();
+      downloadBlob(blob, img.fileNameHint || img.name || 'photo.jpg', 'image/jpeg');
+    };
+    $('modal').addEventListener('click', (e)=>{ if(e.target.id==='modal') closeGallery(); });
+    document.addEventListener('keydown', (e)=>{
+      const m = $('modal');
+      if(!m.classList.contains('open')) return;
+      if(e.key==='Escape') closeGallery();
+      if(e.key==='ArrowLeft') $('prevBtn').click();
+      if(e.key==='ArrowRight') $('nextBtn').click();
+    });
+
+    // Export CSV/JSON
+    $('btnCsv').onclick = ()=>{
+      const proj = sanitizeFilename($('projectName').value);
+      const fname = `${ymd_dash(new Date())}_${proj}.csv`;
+      downloadBlob(toCSV(entries), fname, 'text/csv;charset=utf-8');
+    };
+    $('btnJson').onclick = ()=>{
+      const proj = sanitizeFilename($('projectName').value);
+      const fname = `${ymd_dash(new Date())}_${proj}.json`;
+      downloadBlob(JSON.stringify(entries,null,2), fname, 'application/json');
+    };
+    $('btnClear').onclick = ()=>{
+      if(!confirm('Delete all entries?')) return;
+      entries=[]; save(); render(); suggestSampleId();
+    };
+
+    // ---- Share Project (CSV + images) ----
+    $('btnShareProject').onclick = async ()=>{
+      try{
+        if(!navigator.canShare || !navigator.canShare({ files: [new File(['x'],'dummy.txt',{type:'text/plain'})]})){
+          alert('Sharing files is not supported on this browser.');
+          return;
+        }
+        const proj = sanitizeFilename($('projectName').value || 'project');
+        const today = ymd_dash(new Date());
+        const rowsToday = entries.filter(e => ymd_dash(new Date(e.timestamp)) === today);
+        if(!rowsToday.length){ alert('No entries today.'); return; }
+        const files = [];
+        // CSV
+        const csvBlob = new Blob([toCSV(rowsToday)], {type:'text/csv;charset=utf-8'});
+        files.push(new File([csvBlob], `${today}_${proj}.csv`, {type:'text/csv'}));
+        // Images
+        for(const e of rowsToday){
+          for(const im of (e.images||[])){
+            const b = await (await fetch(im.dataURL)).blob();
+            const fname = im.fileNameHint || 'photo.jpg';
+            files.push(new File([b], fname, {type:'image/jpeg'}));
+          }
+        }
+        await navigator.share({ files, title: `FieldNotes ${proj} ${today}`, text: 'CSV and images' });
+      }catch(err){
+        console.error(err);
+        alert('Share failed or was cancelled.');
+      }
+    };
+
+    // ---- Export Project ZIP (online: load JSZip) ----
+    async function loadJSZip(){
+      if(window.JSZip) return window.JSZip;
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      document.head.appendChild(s);
+      await new Promise((res,rej)=>{ s.onload=res; s.onerror=rej; });
+      return window.JSZip;
+    }
+    $('btnZipProject').onclick = async ()=>{
+      try{
+        const JSZip = await loadJSZip();
+        const proj = sanitizeFilename($('projectName').value || 'project');
+        const today = ymd_dash(new Date());
+        const rowsToday = entries.filter(e => ymd_dash(new Date(e.timestamp)) === today);
+        if(!rowsToday.length){ alert('No entries today.'); return; }
+        const zip = new JSZip();
+        const folder = zip.folder(`${proj}/${today}`);
+        // CSV
+        folder.file(`${today}_${proj}.csv`, toCSV(rowsToday));
+        // Images
+        for(const e of rowsToday){
+          for(const im of (e.images||[])){
+            const b = await (await fetch(im.dataURL)).blob();
+            const ab = await b.arrayBuffer();
+            const fname = im.fileNameHint || 'photo.jpg';
+            folder.file(fname, ab);
+          }
+        }
+        const blob = await zip.generateAsync({type:'blob'});
+        await downloadBlob(blob, `${proj}_${today}.zip`, 'application/zip');
+      }catch(err){
+        console.error(err);
+        alert('ZIP export failed (need internet to load ZIP library).');
+      }
+    };
+
+    load();
+  </script>
+</body>
+</html>
